@@ -1,5 +1,8 @@
 import 'package:amplify_core/amplify_core.dart';
+import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_login/flutter_login.dart';
+import 'package:rflutter_alert/rflutter_alert.dart';
 import 'amplifyconfiguration.dart';
 
 void main() {
@@ -21,6 +24,13 @@ class _MyAppState extends State<MyApp> {
   // Instantiate Amplify
   Amplify amplifyInstance = Amplify();
 
+  // controllers for text input
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
+
+  bool isSignUpComplete = false;
+  bool isSignedIn = false;
+
   @override
   void initState() {
     super.initState();
@@ -29,11 +39,25 @@ class _MyAppState extends State<MyApp> {
     _configureAmplify();
   }
 
+  @override
+  void dispose() {
+    // Clean up the controller when the widget is removed from the
+    // widget tree.
+    emailController.dispose();
+    passwordController.dispose();
+
+    super.dispose();
+  }
+
   void _configureAmplify() async {
     if (!mounted) return;
 
     try {
+      AmplifyAuthCognito authPlugin = AmplifyAuthCognito();
+      amplifyInstance.addPlugin(authPlugins: [authPlugin]);
+
       await amplifyInstance.configure(amplifyconfig);
+
       setState(() {
         _amplifyConfigured = true;
       });
@@ -42,20 +66,54 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
+  Future<String> _registerUser(LoginData data) async {
+    try {
+      Map<String, dynamic> userAttributes = {
+        "email": emailController.text,
+      };
+      SignUpResult res = await Amplify.Auth.signUp(
+          username: data.name,
+          password: data.password,
+          options: CognitoSignUpOptions(userAttributes: userAttributes));
+      setState(() {
+        isSignUpComplete = res.isSignUpComplete;
+        Alert(context: context, type: AlertType.success, title: "Register Successfully!")
+            .show();
+      });
+    } on AuthError catch (e) {
+      Alert(context: context, type: AlertType.error, title: "Register Failed!")
+          .show();
+      return "Register Error: " + e.toString();
+    }
+  }
+
+  Future<String> _signIn(LoginData data) async {
+    try {
+      SignInResult res = await Amplify.Auth.signIn(
+        username: data.name,
+        password: data.password,
+      );
+      setState(() {
+        isSignedIn = res.isSignedIn;
+        Alert(context: context, type: AlertType.success, title: "Log In Successfully!")
+            .show();
+      });
+    } on AuthError catch (e) {
+      Alert(context: context, type: AlertType.error, title: "Log In Failed!")
+          .show();
+      return 'Log In Error: ' + e.toString();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-        home: Scaffold(
-            appBar: AppBar(
-              title: const Text('Amplify Core example app'),
-            ),
-            body: ListView(padding: EdgeInsets.all(10.0), children: <Widget>[
-              Center(
-                child: Column(children: [
-                  const Padding(padding: EdgeInsets.all(5.0)),
-                  Text(_amplifyConfigured ? "configured" : "not configured"),
-                ]),
-              )
-            ])));
+    return SafeArea(
+      child: FlutterLogin(
+          logo: 'assets/vennify_media.png',
+          onLogin: _signIn,
+          onSignup: _registerUser,
+          onRecoverPassword: (_) => null,
+          title: 'Flutter Amplify'),
+    );
   }
 }
